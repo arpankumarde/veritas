@@ -1,5 +1,3 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
 # dependencies
 /node_modules
 /.pnp
@@ -10,8 +8,15 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
-/coverage
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
 
 # next.js
 /.next/
@@ -20,18 +25,41 @@
 # production
 /build
 
+# env files
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# databases (generated at runtime)
+*.db
+*.db-wal
+*.db-shm
+
+# Veritas runtime data
+/output/
+/veritas_retrieval/
+/veritas_kg.db
+/veritas_memory.db
+
+# ChromaDB / vector store
+/.evidence_retrieval/
+/chroma/
+
+# logs
+~/.veritas/
+*.log
+
 # misc
 .DS_Store
 *.pem
+Thumbs.db
 
 # debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
-
-# env files (can opt-in for committing if needed)
-.env*
 
 # vercel
 .vercel
@@ -40,4 +68,21 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Prisma generated
 /src/generated/prisma
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# testing
+/coverage
+
+# spaCy models (large)
+en_core_web_sm/
+en_core_web_lg/
+
+# ML model caches
+.cache/

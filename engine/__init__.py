@@ -1,0 +1,1 @@
+"""Veritas fact-checking engine."""

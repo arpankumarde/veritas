@@ -1,0 +1,65 @@
+[project]
+name = "veritas"
+version = "0.1.0"
+description = "AI-powered fact-checking system with hierarchical multi-agent verification"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "Karan Prasad", email = "hello@karanprasad.com" },
+]
+keywords = ["ai", "fact-checking", "claude", "agents", "verification", "knowledge-graph"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "claude-agent-sdk>=0.1.0",
+    "anthropic>=0.40.0",
+    "rich>=13.7.0",
+    "typer>=0.12.0",
+    "pydantic>=2.5.0",
+    "aiosqlite>=0.19.0",
+    "anyio>=4.0.0",
+    "networkx>=3.2.0",
+    "pyvis>=0.3.2",
+    "numpy>=1.26.0",
+    "sentence-transformers>=3.0.0",
+    "chromadb>=1.0.0",
+    "datasketch>=1.6.0",
+    "spacy>=3.7.0",
+    "transformers>=4.36.0",
+    "httpx>=0.27.0",
+    "python-dotenv>=1.0.0",
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.27.0",
+    "websockets>=12.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/thtskaran/veritas"
+Repository = "https://github.com/thtskaran/veritas"
+Issues = "https://github.com/thtskaran/veritas/issues"
+
+[project.scripts]
+veritas = "engine.main:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["engine", "api"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
