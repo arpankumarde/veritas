@@ -62,18 +62,24 @@ class ExternalMemoryStore:
         self._connection: aiosqlite.Connection | None = None
         self._connect_lock = asyncio.Lock()
 
-    async def connect(self) -> None:
+    async def connect(self, _retries: int = 3) -> None:
         """Open persistent DB connection, create schema."""
         logger.info("External memory connecting: %s", self.db_path)
-        self._connection = await aiosqlite.connect(self.db_path)
-        try:
-            await self._connection.execute("PRAGMA busy_timeout=5000")
-            await self._connection.execute("PRAGMA journal_mode=WAL")
-            await self._init_schema()
-        except Exception:
-            await self._connection.close()
-            self._connection = None
-            raise
+        for attempt in range(1, _retries + 1):
+            self._connection = await aiosqlite.connect(self.db_path)
+            try:
+                await self._connection.execute("PRAGMA busy_timeout=10000")
+                await self._connection.execute("PRAGMA journal_mode=WAL")
+                await self._init_schema()
+                return
+            except Exception:
+                await self._connection.close()
+                self._connection = None
+                if attempt < _retries:
+                    logger.warning("External memory connect attempt %d failed, retrying...", attempt)
+                    await asyncio.sleep(0.5 * attempt)
+                else:
+                    raise
 
     async def close(self) -> None:
         """Close the persistent DB connection."""

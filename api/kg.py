@@ -16,8 +16,9 @@ _DEFAULT_KG_PATH = Path("veritas_kg.db")
 
 def _query_sync(db_path: str, sql: str, params: tuple = ()) -> list[dict]:
     """Execute a read-only query synchronously and return list of dicts."""
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=10)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
     try:
         cursor = conn.execute(sql, params)
         rows = cursor.fetchall()
@@ -28,8 +29,9 @@ def _query_sync(db_path: str, sql: str, params: tuple = ()) -> list[dict]:
 
 def _scalar_sync(db_path: str, sql: str, params: tuple = ()) -> Any:
     """Execute a query and return a single scalar value."""
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=10)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
     try:
         cursor = conn.execute(sql, params)
         row = cursor.fetchone()

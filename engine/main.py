@@ -139,53 +139,88 @@ def ui(
         sock.close()
         return result
 
-    # Start API server
-    if not check_port(port):
-        console.print(f"[cyan]Starting API server on port {port}...[/cyan]")
+    def kill_port(port_num):
+        """Kill all processes listening on the given port."""
         try:
-            subprocess.Popen(
-                [sys.executable, "-m", "api.server"],
-                start_new_session=True,
-                env=os.environ.copy(),
+            result = subprocess.run(
+                ["lsof", "-ti", f":{port_num}"],
+                capture_output=True, text=True,
             )
-            for i in range(10):
-                if check_port(port):
-                    console.print("[green]API server started[/green]")
-                    break
-                time.sleep(0.5)
-            else:
-                console.print("[red]Failed to start API server[/red]")
-                sys.exit(1)
-        except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
+            pids = result.stdout.strip().split()
+            if pids:
+                for pid in set(pids):
+                    try:
+                        os.kill(int(pid), signal.SIGTERM)
+                    except (ProcessLookupError, ValueError):
+                        pass
+                # Wait for processes to die
+                for _ in range(10):
+                    if not check_port(port_num):
+                        break
+                    time.sleep(0.3)
+                else:
+                    # Force kill if still alive
+                    for pid in set(pids):
+                        try:
+                            os.kill(int(pid), signal.SIGKILL)
+                        except (ProcessLookupError, ValueError):
+                            pass
+                    time.sleep(0.5)
+        except Exception:
+            pass
+
+    ui_port = 3004
+
+    # Kill old servers so we always start fresh (picks up new .env, code changes, etc.)
+    if check_port(port):
+        console.print(f"[yellow]Killing old API server on port {port}...[/yellow]")
+        kill_port(port)
+    if check_port(ui_port):
+        console.print(f"[yellow]Killing old frontend on port {ui_port}...[/yellow]")
+        kill_port(ui_port)
+
+    # Start API server
+    console.print(f"[cyan]Starting API server on port {port}...[/cyan]")
+    try:
+        subprocess.Popen(
+            [sys.executable, "-m", "api.server"],
+            start_new_session=True,
+            env=os.environ.copy(),
+        )
+        for i in range(10):
+            if check_port(port):
+                console.print("[green]API server started[/green]")
+                break
+            time.sleep(0.5)
+        else:
+            console.print("[red]Failed to start API server[/red]")
             sys.exit(1)
-    else:
-        console.print(f"[yellow]API already running on port {port}[/yellow]")
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        sys.exit(1)
 
     # Start Next.js frontend
-    ui_port = 3004
-    if not check_port(ui_port):
-        console.print(f"[cyan]Starting frontend on port {ui_port}...[/cyan]")
-        try:
-            subprocess.Popen(
-                ["pnpm", "dev"],
-                start_new_session=True,
-                env=os.environ.copy(),
-            )
-            import urllib.request
-            for i in range(20):
-                try:
-                    urllib.request.urlopen(f"http://localhost:{ui_port}", timeout=1)
-                    console.print("[green]Frontend started[/green]")
-                    break
-                except Exception:
-                    time.sleep(1)
-            else:
-                console.print("[red]Failed to start frontend[/red]")
-                sys.exit(1)
-        except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
+    console.print(f"[cyan]Starting frontend on port {ui_port}...[/cyan]")
+    try:
+        subprocess.Popen(
+            ["pnpm", "dev"],
+            start_new_session=True,
+            env=os.environ.copy(),
+        )
+        import urllib.request
+        for i in range(20):
+            try:
+                urllib.request.urlopen(f"http://localhost:{ui_port}", timeout=1)
+                console.print("[green]Frontend started[/green]")
+                break
+            except Exception:
+                time.sleep(1)
+        else:
+            console.print("[red]Failed to start frontend[/red]")
             sys.exit(1)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        sys.exit(1)
 
     url = f"http://localhost:{ui_port}"
     if session_id:
