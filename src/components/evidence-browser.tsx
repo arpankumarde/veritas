@@ -163,7 +163,7 @@ export default function EvidenceBrowser({ sessionId }: EvidenceBrowserProps) {
                           <ConfidenceRing value={item.confidence} />
                         )}
                       </div>
-                      <p className="text-sm text-text line-clamp-2 leading-snug">{item.content}</p>
+                      <ExpandableText text={item.content} maxLines={2} />
                       <span className="text-xs text-text-muted font-mono">{formatDate(item.created_at)}</span>
                     </button>
                   );
@@ -260,6 +260,27 @@ function formatDate(value: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function ExpandableText({ text, maxLines = 2 }: { text: string; maxLines?: number }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = text.length > 120;
+
+  return (
+    <div>
+      <p className={`text-sm text-text leading-snug ${!expanded && isLong ? `line-clamp-${maxLines}` : ""}`}>
+        {text}
+      </p>
+      {isLong && (
+        <button
+          onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
+          className="text-xs text-amber hover:underline mt-1"
+        >
+          {expanded ? "Show less" : "Read more"}
+        </button>
+      )}
+    </div>
+  );
 }
 
 function getEvidenceBadge(type?: string | null): string {

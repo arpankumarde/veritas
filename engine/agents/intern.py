@@ -381,14 +381,42 @@ Be brief - just state your decision and reason."""
     async def _search_with_expansion(
         self, topic: str, session_id: str
     ) -> tuple[list[SearchResult], str, list[str]]:
-        """Search using expanded queries for better coverage.
+        """Search for evidence — uses direct search for speed.
 
-        Uses QueryExpander to generate multiple query variations, executes them
-        in parallel, and merges results using Reciprocal Rank Fusion.
+        Skips the multi-query expansion pipeline (saves 1-2 LLM calls per search)
+        and does a single direct web search instead.
 
         Returns:
             Tuple of (merged_results, combined_summary, queries_used)
-            Empty queries_used indicates sufficiency was reached.
+        """
+        # FAST PATH: Direct search without LLM-based query expansion.
+        # The topic from the manager is already well-formed.
+        query = topic.strip()
+        if len(query) > 200:
+            query = query[:200]
+
+        self._log(f"[Search] {query[:80]}...", style="cyan")
+
+        results, summary = await self.search_tool.search(query)
+
+        # Also search academic if relevant (parallel)
+        if self.academic_search and _is_academic_topic(topic):
+            try:
+                academic_results, _ = await self.academic_search.search(topic)
+                if academic_results:
+                    existing_urls = {r.url for r in results}
+                    new_academic = [r for r in academic_results if r.url not in existing_urls]
+                    results = new_academic[:3] + results
+            except Exception:
+                pass
+
+        return results, summary, [query] if results else []
+
+    async def _search_with_expansion_DISABLED(
+        self, topic: str, session_id: str
+    ) -> tuple[list[SearchResult], str, list[str]]:
+        """ORIGINAL: Search using expanded queries for better coverage.
+        Disabled for speed — kept for reference.
         """
         expansion = await self.query_expander.expand(
             query=topic,

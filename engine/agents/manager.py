@@ -132,32 +132,27 @@ class ManagerAgent(BaseAgent):
             db_path=str(db.db_path).replace(".db", "_memory.db")
         )
 
-        # Hybrid retrieval for semantic search over evidence
-        self.findings_retriever = get_findings_retriever(
-            persist_dir=str(db.db_path).replace(".db", "_retrieval"),
-            session_id=self.session_id,
-            use_reranker=True,  # Quality is priority
-        )
+        # Hybrid retrieval — disabled for speed (ChromaDB + reranker model
+        # loading adds 10-15s and isn't needed for single-session fact checks).
+        self.findings_retriever = None
 
-        # KG processing (extracted from ManagerAgent to reduce complexity)
+        # KG processing (lightweight — no retrieval indexing)
         self.kg_processor = KGProcessor(
             knowledge_graph=self.knowledge_graph,
-            findings_retriever=self.findings_retriever,
+            findings_retriever=None,
             log=self._log,
         )
 
-        # Verification pipeline for hallucination reduction
+        # Verification pipeline — DISABLED for speed.
+        # Fact-checking relies on evidence quality + Opus verdict, not per-finding CoVe.
         self.verification_config = VerificationConfig()
-        self.verification_pipeline = VerificationPipeline(
-            llm_callback=self._verification_llm_callback,
-            knowledge_graph=self.knowledge_graph,
-            search_callback=self._verification_search_callback,
-            config=self.verification_config,
-        )
-        # Pass pipeline to intern and intern pool
-        self.intern.verification_pipeline = self.verification_pipeline
+        self.verification_config.enable_batch_verification = False
+        self.verification_config.enable_streaming_verification = False
+        self.verification_pipeline = None
+        # Interns run without per-finding verification (massive speed boost)
+        self.intern.verification_pipeline = None
         if self.intern_pool:
-            self.intern_pool.set_verification_pipeline(self.verification_pipeline)
+            self.intern_pool.verification_pipeline = None
 
         # Track batch verification results for reports
         self.last_batch_verification: BatchVerificationResult | None = None
@@ -350,25 +345,7 @@ Provide structured analysis with clear reasoning. When creating directives:
 
         # Use hybrid retrieval to find semantically relevant past evidence
         relevant_evidence_text = ""
-        if self.findings_retriever.count() > 0:
-            try:
-                # Search for evidence relevant to the claim
-                relevant = self.findings_retriever.search(
-                    query=self.claim,
-                    limit=5,
-                    session_id=self.session_id,
-                )
-                if relevant:
-                    relevant_evidence_text = "Most relevant evidence (via semantic search):\n"
-                    for r in relevant:
-                        ev = getattr(r, 'evidence', None) or getattr(r, 'finding', None)
-                        if ev:
-                            etype = getattr(ev, 'evidence_type', getattr(ev, 'finding_type', None))
-                            etype_val = etype.value if hasattr(etype, 'value') else str(etype)
-                            relevant_evidence_text += f"- [{etype_val}] {ev.content[:200]}... (score: {r.score:.2f})\n"
-            except Exception as e:
-                self._log(f"[RETRIEVAL] Search error: {e}", style="dim")
-                logger.warning("Retrieval search error: %s", e, exc_info=True)
+        # Skip semantic retrieval — use direct evidence list instead (faster)
 
         # Get memory context for continuity
         memory_context = self.memory.get_context_for_prompt(max_tokens=2000)
@@ -584,7 +561,7 @@ Think step by step about the best next action."""
                 topic=topic.topic,
                 instructions=f"Gather evidence for and against this sub-claim: {topic.topic}",
                 priority=topic.priority,
-                max_searches=3,
+                max_searches=2,
             )
 
             # Check pause before long intern operation
@@ -1281,7 +1258,7 @@ Be thorough and balanced. Note where evidence has lower confidence."""
                 topic=aspect,
                 instructions=f"Gather evidence for and against this aspect of the claim: {aspect}",
                 priority=8,
-                max_searches=3,
+                max_searches=2,
             )
             for aspect in aspects
         ]
@@ -1369,7 +1346,7 @@ Be thorough and balanced. Note where evidence has lower confidence."""
                 topic=topic.topic,
                 instructions=f"Gather evidence for and against this sub-claim: {topic.topic}",
                 priority=topic.priority,
-                max_searches=3,
+                max_searches=2,
             )
             for topic in topics[:max_parallel]
         ]
@@ -1580,54 +1557,12 @@ Be thorough and balanced. Note where evidence has lower confidence."""
                                 style="yellow",
                             )
 
-            # Phase 1.5: Search for authoritative fact-checks and primary sources
-            if self.intern_pool and not self._pause_requested:
-                try:
-                    self._log(
-                        "[AUTHORITATIVE] Searching for existing fact-checks and primary sources...",
-                        style="bold cyan",
-                    )
-                    authoritative_directives = [
-                        VerificationDirective(
-                            action="search",
-                            topic=f"fact check: {claim}",
-                            instructions=(
-                                "Focus on finding existing fact-checks from reputable organizations "
-                                "(Snopes, PolitiFact, FactCheck.org, Full Fact, etc.). Also search for "
-                                "primary sources, official government data, and authoritative records "
-                                "that directly address this claim. Prioritize established verdicts "
-                                "and original source material."
-                            ),
-                            priority=10,
-                            max_searches=3,
-                        ),
-                    ]
-                    authoritative_result = await self.intern_pool.gather_evidence_parallel(
-                        authoritative_directives, session_id
-                    )
-                    async with self._state_lock:
-                        self.all_evidence.extend(authoritative_result.total_evidence)
-                        self.all_reports.extend(authoritative_result.reports)
+            # Phase 1.5: SKIPPED — authoritative search is now folded into
+            # the parallel init decomposition (one of the 3 angles should be
+            # "existing fact-checks / primary sources").
 
-                    # Process authoritative evidence into KG
-                    await self.kg_processor.process_evidence(
-                        authoritative_result.total_evidence, session_id
-                    )
-
-                    self._log(
-                        f"[AUTHORITATIVE] Complete: {len(authoritative_result.total_evidence)} "
-                        f"evidence items from authoritative source search",
-                        style="bold green",
-                    )
-                except Exception as e:
-                    logger.warning("Authoritative source search failed: %s", e, exc_info=True)
-                    self._log(
-                        f"[AUTHORITATIVE] Search failed ({type(e).__name__}), continuing",
-                        style="yellow",
-                    )
-
-            # Initialize with the main claim as the first topic (if not enough evidence yet)
-            if len(self.all_evidence) < 5:
+            # Initialize with the main claim as fallback if parallel init found nothing
+            if len(self.all_evidence) < 3:
                 initial_topic = await self.db.create_topic(
                     session_id=session_id,
                     topic=claim,
