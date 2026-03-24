@@ -578,9 +578,9 @@ VERDICT PRESENTATION:
 
         report = await writer.generate_report(
             session=self.current_session,
-            findings=evidence,
-            topics_explored=sub_claims_explored,
-            topics_remaining=sub_claims_remaining,
+            evidence=evidence,
+            sub_claims_explored=sub_claims_explored,
+            sub_claims_remaining=sub_claims_remaining,
             kg_exports=kg_exports,
             progress_callback=report_progress,
         )
