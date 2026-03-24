@@ -17,7 +17,7 @@ interface ClarificationQuestion {
 export default function NewCheckForm({ onClose, onSuccess }: NewCheckFormProps) {
   const router = useRouter();
   const [claim, setClaim] = useState("");
-  const [maxIterations, setMaxIterations] = useState(2);
+  const [maxIterations, setMaxIterations] = useState(1);
   const [enableClarification, setEnableClarification] = useState(true);
   const [enableMidQuestions, setEnableMidQuestions] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -54,7 +54,7 @@ export default function NewCheckForm({ onClose, onSuccess }: NewCheckFormProps) 
       const response = await fetch("http://localhost:9090/api/checks/clarify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ goal: claim.trim(), max_questions: 4 }),
+        body: JSON.stringify({ claim: claim.trim(), max_questions: 4 }),
       });
 
       if (!response.ok) {
@@ -86,7 +86,7 @@ export default function NewCheckForm({ onClose, onSuccess }: NewCheckFormProps) 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          goal: claim.trim(),
+          claim: claim.trim(),
           questions: questions,
           answers: answers,
         }),
@@ -97,7 +97,7 @@ export default function NewCheckForm({ onClose, onSuccess }: NewCheckFormProps) 
       }
 
       const enrichData = await enrichResponse.json();
-      const enrichedClaim = enrichData.enriched_goal;
+      const enrichedClaim = enrichData.enriched_claim;
 
       await startCheck(enrichedClaim);
     } catch (err) {

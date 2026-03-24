@@ -134,17 +134,17 @@ export function resumeCheck(id: string): Promise<any> {
   return apiFetch(`/api/checks/${id}/resume`, { method: "POST" });
 }
 
-export function clarify(goal: string, maxQuestions = 4): Promise<{ questions: any[] }> {
+export function clarify(claim: string, maxQuestions = 4): Promise<{ questions: any[] }> {
   return apiFetch("/api/checks/clarify", {
     method: "POST",
-    body: JSON.stringify({ goal, max_questions: maxQuestions }),
+    body: JSON.stringify({ claim, max_questions: maxQuestions }),
   });
 }
 
-export function enrich(goal: string, questions: any[], answers: Record<string, string>): Promise<{ enriched_goal: string }> {
+export function enrich(claim: string, questions: any[], answers: Record<string, string>): Promise<{ enriched_goal: string }> {
   return apiFetch("/api/checks/enrich", {
     method: "POST",
-    body: JSON.stringify({ goal, questions, answers }),
+    body: JSON.stringify({ claim, questions, answers }),
   });
 }
 

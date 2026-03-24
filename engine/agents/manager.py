@@ -73,7 +73,7 @@ class ManagerAgent(BaseAgent):
         # Force Opus model for manager's deep reasoning
         if config is None:
             config = AgentConfig()
-        config.model = "opus"  # Use Opus for heavy reasoning
+        config.model = "sonnet"  # Sonnet for speed; Opus used only for final verdict synthesis
         super().__init__(AgentRole.MANAGER, db, config, console)
         self.intern = intern
         self.claim: str = ""
@@ -584,7 +584,7 @@ Think step by step about the best next action."""
                 topic=topic.topic,
                 instructions=f"Gather evidence for and against this sub-claim: {topic.topic}",
                 priority=topic.priority,
-                max_searches=5,
+                max_searches=3,
             )
 
             # Check pause before long intern operation
@@ -716,6 +716,21 @@ Think step by step about the best next action."""
 
         return False
 
+    def _fire_and_forget_log(self, outcome: str, reasoning: str) -> None:
+        """Fire-and-forget synthesis trigger log."""
+        task = asyncio.create_task(
+            self._log_decision(
+                session_id=self.session_id,
+                decision_type=DecisionType.SYNTHESIS_TRIGGER,
+                decision_outcome=outcome,
+                reasoning=reasoning,
+                inputs={"evidence_count": len(self.all_evidence)},
+                metrics={"iteration": self.state.iteration, "max_iterations": self.config.max_iterations},
+            )
+        )
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
     def _get_elapsed_minutes(self) -> float:
         """Get elapsed time in minutes."""
         if not self.start_time:
@@ -785,40 +800,43 @@ Think step by step about the best next action."""
         return response
 
     def _should_synthesize(self, thought: str) -> bool:
-        """Determine if it's time to synthesize a verdict (iteration-based)."""
+        """Determine if it's time to synthesize a verdict.
+
+        For fact-checking, we synthesize aggressively once we have enough
+        evidence — no need to exhaust all iterations like deep research.
+        """
         # Never synthesize if we have no evidence
         if not self.all_evidence:
             return False
 
         iterations_remaining = self.config.max_iterations - self.state.iteration
+        evidence_count = len(self.all_evidence)
 
-        # On last iteration, always synthesize if we have evidence
-        if iterations_remaining <= 0 and self.all_evidence:
-            task = asyncio.create_task(
-                self._log_decision(
-                    session_id=self.session_id,
-                    decision_type=DecisionType.SYNTHESIS_TRIGGER,
-                    decision_outcome="triggered_last_iteration",
-                    reasoning=f"Last iteration with {len(self.all_evidence)} evidence items",
-                    inputs={"evidence_count": len(self.all_evidence)},
-                    metrics={
-                        "iteration": self.state.iteration,
-                        "max_iterations": self.config.max_iterations,
-                    },
-                )
+        # On last iteration, always synthesize
+        if iterations_remaining <= 0:
+            self._fire_and_forget_log(
+                "triggered_last_iteration",
+                f"Last iteration with {evidence_count} evidence items",
             )
-            self._background_tasks.add(task)
-            task.add_done_callback(self._background_tasks.discard)
             return True
 
-        # Don't allow early synthesis until at least 80% of iterations are done
-        iteration_pct = (self.state.iteration / self.config.max_iterations) * 100
-        if iteration_pct < 80:
-            return False
+        # FAST PATH: If parallel init gathered 5+ evidence items,
+        # synthesize on the very first ReAct iteration — the heavy
+        # lifting is already done.
+        if evidence_count >= 5 and self.state.iteration >= 1:
+            self._fire_and_forget_log(
+                "triggered_sufficient_evidence",
+                f"Sufficient evidence ({evidence_count} items) after parallel phase",
+            )
+            return True
 
-        # Need at least some evidence before synthesizing
-        if len(self.all_evidence) < 3:
-            return False
+        # With 3+ evidence, synthesize after half the iterations
+        if evidence_count >= 3 and self.state.iteration >= max(1, self.config.max_iterations // 2):
+            self._fire_and_forget_log(
+                "triggered_halfway_with_evidence",
+                f"{evidence_count} evidence items at iteration {self.state.iteration}",
+            )
+            return True
 
         # Check explicit signals from LLM
         thought_lower = thought.lower()
@@ -1174,7 +1192,9 @@ Create:
 
 Be thorough and balanced. Note where evidence has lower confidence."""
 
-        response = await self.call_claude(prompt, use_thinking=True)
+        # Use Opus with extended thinking for the final verdict — this is
+        # the one call where deep reasoning matters most.
+        response = await self.call_claude(prompt, use_thinking=True, model_override="opus")
 
         # Extract verdict from the response
         verdict = self._extract_verdict(response)
@@ -1261,7 +1281,7 @@ Be thorough and balanced. Note where evidence has lower confidence."""
                 topic=aspect,
                 instructions=f"Gather evidence for and against this aspect of the claim: {aspect}",
                 priority=8,
-                max_searches=5,
+                max_searches=3,
             )
             for aspect in aspects
         ]
@@ -1349,7 +1369,7 @@ Be thorough and balanced. Note where evidence has lower confidence."""
                 topic=topic.topic,
                 instructions=f"Gather evidence for and against this sub-claim: {topic.topic}",
                 priority=topic.priority,
-                max_searches=5,
+                max_searches=3,
             )
             for topic in topics[:max_parallel]
         ]
@@ -1579,7 +1599,7 @@ Be thorough and balanced. Note where evidence has lower confidence."""
                                 "and original source material."
                             ),
                             priority=10,
-                            max_searches=5,
+                            max_searches=3,
                         ),
                     ]
                     authoritative_result = await self.intern_pool.gather_evidence_parallel(

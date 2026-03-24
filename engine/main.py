@@ -38,7 +38,7 @@ def _handle_interrupt(signum, frame):
 @app.command()
 def main(
     claim: str = typer.Argument(..., help="The claim or statement to fact-check"),
-    iterations: int = typer.Option(5, "--iterations", "-n", help="Number of verification iterations", min=1, max=30),
+    iterations: int = typer.Option(1, "--iterations", "-n", help="Number of verification iterations (1 is usually enough)", min=1, max=10),
     db_path: str = typer.Option("veritas.db", "--db", "-d", help="Path to SQLite database"),
     no_clarify: bool = typer.Option(False, "--no-clarify", help="Skip pre-check clarification questions"),
     autonomous: bool = typer.Option(False, "--autonomous", "-a", help="Run fully autonomous"),

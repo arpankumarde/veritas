@@ -25,8 +25,8 @@ running_harnesses: dict[str, object] = {}  # session_id -> VeritasHarness
 class StartCheckRequest(BaseModel):
     """Request to start a fact-check."""
     claim: str
-    max_iterations: int = 2
-    max_depth: int = 3
+    max_iterations: int = 1
+    max_depth: int = 2
     autonomous: bool = True
     enable_mid_questions: bool = False
 
@@ -253,7 +253,7 @@ async def enrich_claim(request: EnrichRequest):
         except Exception:
             continue
 
-    enriched = await interaction._enrich_goal(request.claim, questions, answers)
+    enriched = await interaction._enrich_claim(request.claim, questions, answers)
     return {"enriched_claim": enriched}
 
 
