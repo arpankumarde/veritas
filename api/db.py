@@ -253,7 +253,7 @@ class APIDatabase:
                 e.content AS evidence_content, e.evidence_type,
                 e.source_url, e.confidence AS current_confidence
             FROM verification_results vr
-            LEFT JOIN evidence e ON e.id = vr.finding_id AND e.session_id = vr.session_id
+            LEFT JOIN findings e ON e.id = vr.finding_id AND e.session_id = vr.session_id
             WHERE vr.session_id = ?
             ORDER BY vr.created_at DESC LIMIT ? OFFSET ?""",
             (session_id, limit, offset),

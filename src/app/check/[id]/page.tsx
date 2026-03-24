@@ -29,7 +29,6 @@ const tabs = [
   { id: "graph", label: "Knowledge Graph", icon: "hub" },
   { id: "sources", label: "Sources", icon: "travel_explore" },
   { id: "agents", label: "Agents", icon: "psychology" },
-  { id: "verify", label: "Verification", icon: "verified" },
 ] as const;
 
 type TabId = (typeof tabs)[number]["id"];
@@ -441,15 +440,6 @@ export default function CheckDetail() {
           />
         )}
 
-        {activeTab === "verify" && (
-          <SubPagePlaceholder
-            icon="verified"
-            title="CoVe Verification Pipeline"
-            description="Inspect the Chain-of-Verification and CRITIC pipeline results for each piece of evidence, including confidence scoring and contradiction detection."
-            linkHref={`/check/${sessionId}/verify`}
-            linkText="Open Verification View"
-          />
-        )}
       </main>
 
       {pendingQuestion && (
