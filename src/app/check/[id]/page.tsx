@@ -349,7 +349,7 @@ export default function CheckDetail() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard icon="travel_explore" label="Sources Found" value={stats ? String(stats.sources) : "--"} color="text-amber" />
             <StatCard icon="description" label="Evidence" value={stats ? String(stats.evidence) : "--"} color="text-emerald" />
-            <StatCard icon="repeat" label="Iterations" value={iterationProgress} color={isRunning ? "text-amber" : "text-text-secondary"} animate={isRunning} />
+            {/* <StatCard icon="repeat" label="Iterations" value={iterationProgress} color={isRunning ? "text-amber" : "text-text-secondary"} animate={isRunning} /> */}
             <StatCard icon="timer" label="Elapsed" value={elapsed} color="text-text-secondary" animate={isRunning} />
           </div>
         </div>

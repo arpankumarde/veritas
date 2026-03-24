@@ -619,6 +619,78 @@ function renderEventData(
   }
 
   if (event.event_type === "action" && data.action) {
+    const isSearch = data.action === "search";
+    if (isSearch) {
+      return (
+        <div className="space-y-2">
+          {data.query ? (
+            <p className="font-medium">
+              Search: <span className="text-amber">{data.query}</span>
+            </p>
+          ) : (
+            <p className="font-medium">Search</p>
+          )}
+          {(data.results_count != null || data.evidence_extracted || data.iteration) ? (
+            <div className="flex gap-3 text-xs text-text-muted">
+              {data.results_count != null ? <span>{data.results_count} results</span> : null}
+              {data.evidence_extracted ? (
+                <span>{data.evidence_extracted} evidence extracted</span>
+              ) : null}
+              {data.iteration ? <span>Iteration {data.iteration}</span> : null}
+            </div>
+          ) : null}
+          {Array.isArray(data.result_titles) && data.result_titles.length > 0 ? (
+            <div className="mt-1 space-y-1.5 text-xs border-l-2 border-amber/30 pl-3">
+              {data.result_titles.map((r: { title: string; url?: string }, i: number) => (
+                <div key={i} className="flex items-start gap-2">
+                  <span className="text-amber/60 shrink-0 font-mono">{i + 1}.</span>
+                  <div className="min-w-0">
+                    <p className="text-text font-medium">{r.title}</p>
+                    {r.url ? (
+                      <a
+                        href={r.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-amber/70 hover:underline truncate block text-[11px]"
+                      >
+                        {truncateUrl(r.url, 60)}
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {Array.isArray(data.queries_used) && data.queries_used.length > 1 ? (
+            <div className="text-[11px] text-text-muted">
+              Also searched: {data.queries_used.slice(1).join(", ")}
+            </div>
+          ) : null}
+        </div>
+      );
+    }
+    const isDeepScrape = data.action === "deep_scrape";
+    if (isDeepScrape) {
+      return (
+        <div className="space-y-2">
+          <p className="font-medium">
+            Deep Scraping <span className="text-amber">{data.urls_count} sources</span>
+          </p>
+          <div className="flex gap-3 text-xs text-text-muted flex-wrap">
+            {data.platform_urls ? (
+              <span>{data.platform_urls} platform URLs</span>
+            ) : null}
+            {Array.isArray(data.platforms) && data.platforms.length > 0 ? (
+              <span className="flex gap-1 flex-wrap">
+                {data.platforms.map((p: string) => (
+                  <span key={p} className="obs-badge badge-action">{p}</span>
+                ))}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="space-y-1">
         <p className="font-medium">{data.action}</p>

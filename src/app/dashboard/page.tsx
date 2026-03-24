@@ -8,6 +8,7 @@ import Link from "next/link";
 interface Session {
   session_id: string;
   goal: string;
+  claim: string;
   max_iterations: number;
   status: string;
   created_at: string;
@@ -101,9 +102,9 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="p-8 hover:bg-surface transition-colors">
-            <p className="text-[10px] font-mono font-bold text-text-muted uppercase tracking-[0.2em] mb-4">System Efficiency</p>
-            <p className="font-display text-4xl font-bold text-text mb-1">98.4<span className="text-xl opacity-60 ml-0.5">%</span></p>
-            <p className="text-[11px] text-text-secondary">Consensus accuracy metric</p>
+            <p className="text-[10px] font-mono font-bold text-text-muted uppercase tracking-[0.2em] mb-4">System Uptime</p>
+            <p className="font-display text-4xl font-bold text-text mb-1"><SystemUptime /></p>
+            <p className="text-[11px] text-text-secondary">Since March 24, 2026</p>
           </div>
         </div>
 
@@ -212,7 +213,7 @@ function SessionCard({ session, onClick }: { session: Session; onClick: () => vo
       </div>
 
       <h3 className="text-sm font-semibold text-text mb-6 line-clamp-2 leading-relaxed min-h-[3rem]">
-        {session.goal}
+        {session.claim}
       </h3>
 
       <div className="flex items-center justify-between pt-4 border-t border-obs-border/30 text-[10px] font-mono text-text-secondary uppercase">
@@ -258,4 +259,31 @@ function getDuration(startDateString: string, endDateString?: string | null): st
   if (diffSecs < 60) return `${diffSecs}s`;
   if (diffMins < 60) return `${diffMins}m`;
   return `${Math.floor(diffMins / 60)}h ${diffMins % 60}m`;
+}
+
+const SYSTEM_EPOCH = new Date("2026-03-24T08:00:00Z").getTime();
+
+function SystemUptime() {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const diffMs = now - SYSTEM_EPOCH;
+  if (diffMs < 0) return <>0s</>;
+
+  const totalSecs = Math.floor(diffMs / 1000);
+  const days = Math.floor(totalSecs / 86400);
+  const hours = Math.floor((totalSecs % 86400) / 3600);
+  const mins = Math.floor((totalSecs % 3600) / 60);
+
+  if (days > 0) {
+    return <>{days}<span className="text-xl opacity-60 ml-0.5">d</span> {hours}<span className="text-xl opacity-60 ml-0.5">h</span></>;
+  }
+  if (hours > 0) {
+    return <>{hours}<span className="text-xl opacity-60 ml-0.5">h</span> {mins}<span className="text-xl opacity-60 ml-0.5">m</span></>;
+  }
+  return <>{mins}<span className="text-xl opacity-60 ml-0.5">m</span></>;
 }

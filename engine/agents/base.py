@@ -243,14 +243,38 @@ class BaseAgent(ABC):
                 self._log(f"[Act] {self.state.last_action}")
                 self.state.history.append({"type": "action", "content": action_result})
 
-                # Emit action event
+                # Emit action event with search details when available
                 if self.session_id:
-                    await emit_action(
-                        session_id=self.session_id,
-                        agent=self.role.value,
-                        action=self.state.last_action,
-                        details={"iteration": self.state.iteration}
-                    )
+                    action_details: dict[str, Any] = {"iteration": self.state.iteration}
+                    if action_result.get("action") == "search":
+                        action_details["query"] = str(action_result.get("query", ""))
+                        action_details["queries_used"] = [
+                            str(q) for q in action_result.get("queries_used", [])
+                        ]
+                        action_details["results_count"] = action_result.get("results_count", 0)
+                        action_details["evidence_extracted"] = action_result.get("evidence_extracted", 0)
+                        # Include top result titles (safe serialization)
+                        results = action_result.get("results") or []
+                        titles = []
+                        for r in results[:5]:
+                            try:
+                                titles.append({
+                                    "title": str(getattr(r, "title", "")),
+                                    "url": str(getattr(r, "url", "")),
+                                })
+                            except Exception:
+                                pass
+                        if titles:
+                            action_details["result_titles"] = titles
+                    try:
+                        await emit_action(
+                            session_id=self.session_id,
+                            agent=self.role.value,
+                            action=self.state.last_action,
+                            details=action_details,
+                        )
+                    except Exception as e:
+                        logger.warning("Failed to emit action event: %s", e)
 
                 if self._stop_requested or self._pause_requested:
                     break

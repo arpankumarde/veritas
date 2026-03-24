@@ -65,17 +65,36 @@ const predicateColors: Record<string, string> = {
     authored_by: "#64748b",
     mentioned_in: "#64748b",
 };
-const defaultEdgeColor = "#1e2440";
-
-/* ── Graph theme (observatory dark) ──────────────────────── */
-const THEME = {
-    fontColor: "#e2e8f0",
-    fontBg: "rgba(8, 10, 18, 0.85)",
-    edgeFontColor: "#94a3b8",
-    pageBg: "#080a12",
-    dimmedFont: "rgba(226,232,240,0.25)",
-    dimmedEdge: "rgba(30,36,58,0.3)",
+/* ── Graph themes ──────────────────────────────────────── */
+const THEMES = {
+    light: {
+        fontColor: "#1e293b",
+        fontBg: "rgba(255, 255, 255, 0.85)",
+        edgeFontColor: "#64748b",
+        pageBg: "#ffffff",
+        dimmedFont: "rgba(30,41,59,0.2)",
+        dimmedEdge: "rgba(148,163,184,0.25)",
+        edgeFontStroke: "#ffffff",
+        stabilizationBg: "rgba(255,255,255,0.7)",
+        highlightBorder: "#1e293b",
+        defaultEdge: "#94a3b8",
+    },
+    dark: {
+        fontColor: "#e2e8f0",
+        fontBg: "rgba(8, 10, 18, 0.85)",
+        edgeFontColor: "#94a3b8",
+        pageBg: "#080a12",
+        dimmedFont: "rgba(226,232,240,0.25)",
+        dimmedEdge: "rgba(30,36,58,0.3)",
+        edgeFontStroke: "#080a12",
+        stabilizationBg: "rgba(8,10,18,0.7)",
+        highlightBorder: "#e2e8f0",
+        defaultEdge: "#1e2440",
+    },
 };
+
+type GraphThemeKey = keyof typeof THEMES;
+type GraphTheme = typeof THEMES[GraphThemeKey];
 
 /* ── Degree centrality helper ──────────────────────────── */
 function computeDegrees(entities: KGEntity[], relations: KGRelation[]): Map<string, number> {
@@ -105,6 +124,8 @@ export default function KnowledgeGraphPage() {
     const [searchActive, setSearchActive] = useState(false);
     const [zoomLevel, setZoomLevel] = useState(100);
     const [stabilizing, setStabilizing] = useState(false);
+    const [graphTheme, setGraphTheme] = useState<GraphThemeKey>("light");
+    const themeRef = useRef<GraphTheme>(THEMES.light);
 
     const containerRef = useRef<HTMLDivElement>(null);
     const networkRef = useRef<any>(null);
@@ -287,13 +308,13 @@ export default function KnowledgeGraphPage() {
                 nodeUpdates.push({
                     id: nodeId,
                     opacity: 1.0,
-                    font: { color: THEME.fontColor, background: THEME.fontBg },
+                    font: { color: themeRef.current.fontColor, background: themeRef.current.fontBg },
                 });
             } else {
                 nodeUpdates.push({
                     id: nodeId,
                     opacity: 0.15,
-                    font: { color: THEME.dimmedFont, background: "transparent" },
+                    font: { color: themeRef.current.dimmedFont, background: "transparent" },
                 });
             }
         }
@@ -305,7 +326,7 @@ export default function KnowledgeGraphPage() {
         for (const edgeId in allEdges) {
             const edge = allEdges[edgeId];
             if (connectedEdgeIds.has(edgeId)) {
-                const color = edge._originalColor || defaultEdgeColor;
+                const color = edge._originalColor || themeRef.current.defaultEdge;
                 edgeUpdates.push({
                     id: edgeId,
                     color: { color, highlight: color, hover: color, opacity: 1.0 },
@@ -314,7 +335,7 @@ export default function KnowledgeGraphPage() {
             } else {
                 edgeUpdates.push({
                     id: edgeId,
-                    color: { color: THEME.dimmedEdge, highlight: THEME.dimmedEdge, hover: THEME.dimmedEdge, opacity: 0.1 },
+                    color: { color: themeRef.current.dimmedEdge, highlight: themeRef.current.dimmedEdge, hover: themeRef.current.dimmedEdge, opacity: 0.1 },
                     width: 0.5,
                 });
             }
@@ -332,7 +353,7 @@ export default function KnowledgeGraphPage() {
             nodeUpdates.push({
                 id: nodeId,
                 opacity: 1.0,
-                font: { color: THEME.fontColor, background: THEME.fontBg },
+                font: { color: themeRef.current.fontColor, background: themeRef.current.fontBg },
             });
         }
         nodesDatasetRef.current.update(nodeUpdates);
@@ -341,7 +362,7 @@ export default function KnowledgeGraphPage() {
         const allEdges = allEdgesRef.current;
         for (const edgeId in allEdges) {
             const edge = allEdges[edgeId];
-            const color = edge._originalColor || defaultEdgeColor;
+            const color = edge._originalColor || themeRef.current.defaultEdge;
             edgeUpdates.push({
                 id: edgeId,
                 color: { color: color + "80", highlight: color, hover: color, opacity: 1.0 },
@@ -359,6 +380,8 @@ export default function KnowledgeGraphPage() {
             import("vis-data").then(({ DataSet }) => {
                 if (!containerRef.current) return;
 
+                const theme = THEMES[graphTheme];
+                themeRef.current = theme;
                 setStabilizing(true);
 
                 // Compute degree centrality
@@ -391,17 +414,17 @@ export default function KnowledgeGraphPage() {
                         color: {
                             background: cfg.bg,
                             border: cfg.border,
-                            highlight: { background: cfg.bg, border: "#e2e8f0" },
-                            hover: { background: cfg.bg, border: "#e2e8f0" },
+                            highlight: { background: cfg.bg, border: theme.highlightBorder },
+                            hover: { background: cfg.bg, border: theme.highlightBorder },
                         },
                         shape: "dot",
                         size,
                         mass: 1 + degree * 0.2,
                         font: {
-                            color: THEME.fontColor,
+                            color: theme.fontColor,
                             size: Math.max(10, Math.min(16, 10 + degree * 0.5)),
                             face: "Outfit, system-ui, sans-serif",
-                            background: THEME.fontBg,
+                            background: theme.fontBg,
                             strokeWidth: 0,
                         },
                         borderWidth: 2,
@@ -417,7 +440,7 @@ export default function KnowledgeGraphPage() {
                 const edges = relations
                     .filter(r => filteredIds.has(r.subject_id) && filteredIds.has(r.object_id))
                     .map(r => {
-                        const color = predicateColors[r.predicate] || defaultEdgeColor;
+                        const color = predicateColors[r.predicate] || theme.defaultEdge;
                         const width = 1 + r.confidence * 1.5;
                         return {
                             id: r.id,
@@ -471,11 +494,11 @@ export default function KnowledgeGraphPage() {
                     edges: {
                         font: {
                             size: 9,
-                            color: "#64748b",
+                            color: theme.edgeFontColor,
                             strokeWidth: 2,
-                            strokeColor: "#080a12",
+                            strokeColor: theme.edgeFontStroke,
                             align: "middle",
-                            background: "#080a12",
+                            background: theme.edgeFontStroke,
                         },
                         chosen: true,
                         selectionWidth: 1,
@@ -623,11 +646,11 @@ export default function KnowledgeGraphPage() {
                 networkRef.current = null;
             }
         };
-    }, [filteredEntities, relations, loading, highlightConnected, unhighlightAll]);
+    }, [filteredEntities, relations, loading, highlightConnected, unhighlightAll, graphTheme]);
 
     /* ── Render ─────────────────────────────────────────── */
     return (
-        <div className="min-h-screen flex flex-col bg-void">
+        <div className="min-h-screen flex flex-col" style={{ backgroundColor: THEMES[graphTheme].pageBg }}>
             {/* Header */}
             <header className="border-b border-obs-border bg-surface/50 backdrop-blur-xl sticky top-0 z-20">
                 <div className="max-w-full mx-auto px-6 py-3">
@@ -695,6 +718,13 @@ export default function KnowledgeGraphPage() {
                                 )}
                             </div>
 
+                            <button
+                                onClick={() => setGraphTheme(t => t === "light" ? "dark" : "light")}
+                                className="obs-btn btn-ghost text-xs gap-1"
+                                title={`Switch to ${graphTheme === "light" ? "dark" : "light"} theme`}
+                            >
+                                <span className="material-symbols-outlined text-sm">{graphTheme === "light" ? "dark_mode" : "light_mode"}</span>
+                            </button>
                             <button onClick={fitToView} className="obs-btn btn-ghost text-xs gap-1" title="Fit to view">
                                 <span className="material-symbols-outlined text-sm">fit_screen</span>
                             </button>
@@ -755,11 +785,11 @@ export default function KnowledgeGraphPage() {
             ) : (
                 <div className="flex-1 relative overflow-hidden">
                     {/* Vis-Network Container */}
-                    <div ref={containerRef} className="absolute inset-0" style={{ background: THEME.pageBg }} />
+                    <div ref={containerRef} className="absolute inset-0" style={{ background: THEMES[graphTheme].pageBg }} />
 
                     {/* Stabilization overlay */}
                     {stabilizing && (
-                        <div className="absolute inset-0 z-10 flex items-center justify-center" style={{ background: "rgba(8,10,18,0.7)" }}>
+                        <div className="absolute inset-0 z-10 flex items-center justify-center" style={{ background: THEMES[graphTheme].stabilizationBg }}>
                             <div className="flex items-center gap-3 text-text-secondary text-sm">
                                 <span className="material-symbols-outlined animate-spin text-amber">progress_activity</span>
                                 Computing layout...
@@ -885,7 +915,7 @@ export default function KnowledgeGraphPage() {
                                     </label>
                                     <div className="space-y-2">
                                         {Object.values(d.outByPred).map(group => {
-                                            const color = predicateColors[group.predicate] || defaultEdgeColor;
+                                            const color = predicateColors[group.predicate] || THEMES[graphTheme].defaultEdge;
                                             return (
                                                 <div key={group.predicate}>
                                                     <div className="flex items-center gap-1.5 mb-1">
@@ -925,7 +955,7 @@ export default function KnowledgeGraphPage() {
                                     </label>
                                     <div className="space-y-2">
                                         {Object.values(d.inByPred).map(group => {
-                                            const color = predicateColors[group.predicate] || defaultEdgeColor;
+                                            const color = predicateColors[group.predicate] || THEMES[graphTheme].defaultEdge;
                                             return (
                                                 <div key={group.predicate}>
                                                     <div className="flex items-center gap-1.5 mb-1">

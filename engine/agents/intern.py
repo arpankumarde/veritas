@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Optional
 
-from ..events import emit_finding
+from ..events import emit_action, emit_finding
 from .base import AgentConfig, BaseAgent, DecisionType
 
 
@@ -624,14 +624,31 @@ Output ONLY the search query (15-25 words max), nothing else."""
         session_id: str,
         search_summary: str = "",
     ) -> list[Evidence]:
-        """Process search results and extract evidence."""
+        """Process search results, deep-scrape top sources, and extract evidence."""
         if not results and not search_summary:
             return []
 
+        # Deep-scrape top results in parallel for richer content
+        scraped_content = await self._deep_scrape_results(results[:5], session_id)
+
         # Format results for Claude to analyze
-        results_text = "\n\n".join(
-            [f"Title: {r.title}\nURL: {r.url}\nSnippet: {r.snippet}" for r in results[:10]]
-        )
+        results_parts = []
+        for r in results[:10]:
+            parts = [f"Title: {r.title}", f"URL: {r.url}"]
+            if r.snippet:
+                parts.append(f"Snippet: {r.snippet}")
+            if hasattr(r, "engine") and r.engine and r.engine != "google":
+                parts.append(f"Engine: {r.engine}")
+            # Attach scraped page content (truncated)
+            page_md = scraped_content.get(r.url, {}).get("markdown", "")
+            if page_md:
+                parts.append(f"Page Content:\n{page_md[:3000]}")
+            # Attach structured platform data
+            platform_text = scraped_content.get(r.url, {}).get("platform_text", "")
+            if platform_text:
+                parts.append(f"Platform Data:\n{platform_text}")
+            results_parts.append("\n".join(parts))
+        results_text = "\n\n---\n\n".join(results_parts)
 
         # Include the search summary if available
         summary_section = ""
@@ -919,6 +936,78 @@ Output ONLY the search query (15-25 words max), nothing else."""
                         self.deduplicator.add(evidence_id, content)
 
         return evidence_items
+
+    async def _deep_scrape_results(
+        self, results: list[SearchResult], session_id: str
+    ) -> dict[str, dict]:
+        """Deep-scrape top search result URLs in parallel.
+
+        For each URL, fetches:
+        - Full page content as markdown
+        - Structured platform data (if URL matches a known platform like X, Reddit, etc.)
+
+        Returns dict mapping URL -> {"markdown": str, "platform_text": str}
+        """
+        if not results:
+            return {}
+
+        from ..tools.bright_data import detect_platform, format_platform_data
+
+        urls = [r.url for r in results if r.url]
+        if not urls:
+            return {}
+
+        # Emit scraping event so UI shows progress
+        platform_urls = [u for u in urls if detect_platform(u)]
+        if session_id and self.session_id:
+            scrape_msg = f"Deep scraping {len(urls)} sources"
+            if platform_urls:
+                scrape_msg += f" ({len(platform_urls)} platform URLs detected)"
+            await emit_action(
+                session_id=self.session_id,
+                agent=self.role.value,
+                action="deep_scrape",
+                details={
+                    "urls_count": len(urls),
+                    "platform_urls": len(platform_urls),
+                    "platforms": list({detect_platform(u) for u in platform_urls}),
+                },
+            )
+
+        self._log(f"[Deep Scrape] Scraping {len(urls)} sources...", style="cyan")
+
+        try:
+            scraped = await self.search_tool.deep_scrape_batch(urls)
+        except Exception as e:
+            logger.warning("Deep scrape batch failed: %s", e)
+            return {}
+
+        out: dict[str, dict] = {}
+        for item in scraped:
+            url = item.get("url", "")
+            md = item.get("markdown", "")
+            platform_data = item.get("platform_data")
+            platform_name = item.get("platform")
+
+            platform_text = ""
+            if platform_data and platform_name:
+                try:
+                    from ..tools.bright_data import PlatformData as PD
+                    pd = PD(platform=platform_name, url=url, data=platform_data)
+                    platform_text = format_platform_data(pd)
+                except Exception:
+                    pass
+
+            if md or platform_text:
+                out[url] = {"markdown": md, "platform_text": platform_text}
+
+                if platform_text:
+                    self._log(f"  [{platform_name}] {url[:60]}", style="magenta")
+                elif md:
+                    self._log(f"  [scraped] {url[:60]} ({len(md)} chars)", style="dim")
+
+        self._log(f"[Deep Scrape] Got content for {len(out)}/{len(urls)} URLs", style="cyan")
+        return out
 
     async def _compile_report(self, topic: str, session_id: str) -> EvidenceReport:
         """Compile evidence into a report for the Manager."""
