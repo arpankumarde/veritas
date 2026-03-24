@@ -3,6 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 
+type InputMode = "url" | "text";
+
 interface PlagiarismMatch {
   passage: string;
   source_url: string;
@@ -20,24 +22,38 @@ interface PlagiarismResult {
 }
 
 export default function PlagiarismCheckerPage() {
+  const [mode, setMode] = useState<InputMode>("url");
   const [url, setUrl] = useState("");
+  const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<PlagiarismResult | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!url.trim()) return;
+
+    if (mode === "url" && !url.trim()) return;
+    if (mode === "text" && !text.trim()) return;
 
     setLoading(true);
     setError("");
     setResult(null);
 
     try {
-      const res = await fetch("http://localhost:9090/api/tools/check-plagiarism", {
+      const endpoint =
+        mode === "url"
+          ? "http://localhost:9090/api/tools/check-plagiarism"
+          : "http://localhost:9090/api/tools/check-plagiarism-text";
+
+      const body =
+        mode === "url"
+          ? { url: url.trim() }
+          : { text: text.trim() };
+
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: url.trim() }),
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
@@ -52,6 +68,9 @@ export default function PlagiarismCheckerPage() {
       setLoading(false);
     }
   };
+
+  const isSubmitDisabled =
+    loading || (mode === "url" ? !url.trim() : !text.trim());
 
   const verdictConfig: Record<string, { label: string; color: string; bg: string; icon: string }> = {
     original: { label: "Original Content", color: "text-emerald", bg: "bg-emerald-soft", icon: "verified" },
@@ -91,34 +110,94 @@ export default function PlagiarismCheckerPage() {
         {/* Input Section */}
         <div className="mb-12">
           <h2 className="text-2xl font-display font-semibold mb-2">Check for Plagiarism</h2>
-          <p className="text-text-secondary text-sm mb-8">
-            Paste a URL to any article or webpage. Veritas will extract key passages and search the web for matching content.
+          <p className="text-text-secondary text-sm mb-6">
+            Paste a URL or text to check. Veritas will extract key passages and search the web for matching content.
           </p>
 
-          <form onSubmit={handleSubmit} className="flex gap-3">
-            <div className="flex-1 relative">
-              <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted text-lg">link</span>
-              <input
-                type="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://example.com/article"
-                className="w-full pl-10 pr-4 py-3 border border-obs-border rounded-lg text-sm focus:outline-none focus:border-amber focus:ring-1 focus:ring-amber/20 bg-white transition-colors"
-                required
-              />
-            </div>
+          {/* Mode Tabs */}
+          <div className="flex gap-1 mb-6 bg-surface rounded-lg p-1 w-fit">
             <button
-              type="submit"
-              disabled={loading || !url.trim()}
-              className="bg-amber hover:bg-amber-hover disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg px-6 py-3 text-sm font-bold uppercase tracking-wider transition-all flex items-center gap-2 shrink-0"
+              type="button"
+              onClick={() => { setMode("url"); setError(""); setResult(null); }}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                mode === "url"
+                  ? "bg-white text-text shadow-sm"
+                  : "text-text-muted hover:text-text"
+              }`}
             >
-              {loading ? (
-                <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
-              ) : (
-                <span className="material-symbols-outlined text-sm">plagiarism</span>
-              )}
-              {loading ? "Checking..." : "Check"}
+              <span className="material-symbols-outlined text-sm">link</span>
+              URL
             </button>
+            <button
+              type="button"
+              onClick={() => { setMode("text"); setError(""); setResult(null); }}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                mode === "text"
+                  ? "bg-white text-text shadow-sm"
+                  : "text-text-muted hover:text-text"
+              }`}
+            >
+              <span className="material-symbols-outlined text-sm">edit_note</span>
+              Paste Text
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit}>
+            {mode === "url" ? (
+              <div className="flex gap-3">
+                <div className="flex-1 relative">
+                  <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted text-lg">link</span>
+                  <input
+                    type="url"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder="https://example.com/article"
+                    className="w-full pl-10 pr-4 py-3 border border-obs-border rounded-lg text-sm focus:outline-none focus:border-amber focus:ring-1 focus:ring-amber/20 bg-white transition-colors"
+                    required
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isSubmitDisabled}
+                  className="bg-amber hover:bg-amber-hover disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg px-6 py-3 text-sm font-bold uppercase tracking-wider transition-all flex items-center gap-2 shrink-0"
+                >
+                  {loading ? (
+                    <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
+                  ) : (
+                    <span className="material-symbols-outlined text-sm">plagiarism</span>
+                  )}
+                  {loading ? "Checking..." : "Check"}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <textarea
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder="Paste the text you want to check for plagiarism..."
+                  rows={8}
+                  className="w-full px-4 py-3 border border-obs-border rounded-lg text-sm focus:outline-none focus:border-amber focus:ring-1 focus:ring-amber/20 bg-white transition-colors resize-y font-mono leading-relaxed"
+                  required
+                />
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-text-muted">
+                    {text.length > 0 ? `${text.length.toLocaleString()} characters` : "Minimum ~50 characters recommended"}
+                  </p>
+                  <button
+                    type="submit"
+                    disabled={isSubmitDisabled}
+                    className="bg-amber hover:bg-amber-hover disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg px-6 py-3 text-sm font-bold uppercase tracking-wider transition-all flex items-center gap-2 shrink-0"
+                  >
+                    {loading ? (
+                      <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
+                    ) : (
+                      <span className="material-symbols-outlined text-sm">plagiarism</span>
+                    )}
+                    {loading ? "Checking..." : "Check"}
+                  </button>
+                </div>
+              </div>
+            )}
           </form>
 
           {error && (
@@ -133,8 +212,12 @@ export default function PlagiarismCheckerPage() {
         {loading && (
           <div className="border border-obs-border border-dashed rounded-lg p-16 text-center">
             <span className="material-symbols-outlined animate-spin text-amber text-4xl mb-4 block">progress_activity</span>
-            <p className="text-sm font-medium text-text mb-1">Scraping content and searching for matches...</p>
-            <p className="text-xs text-text-muted">This may take 20-30 seconds</p>
+            <p className="text-sm font-medium text-text mb-1">
+              {mode === "url" ? "Scraping content and searching for matches..." : "Analyzing text and searching for matches..."}
+            </p>
+            <p className="text-xs text-text-muted">
+              {mode === "url" ? "This may take 20-30 seconds" : "This may take 15-25 seconds"}
+            </p>
           </div>
         )}
 
@@ -229,10 +312,12 @@ export default function PlagiarismCheckerPage() {
               <div className="border border-obs-border rounded-lg p-6 bg-white">
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="text-[11px] font-mono font-bold text-text-muted uppercase tracking-[0.2em]">Content Preview</h4>
-                  <a href={result.url} target="_blank" rel="noopener noreferrer" className="text-xs text-amber hover:underline flex items-center gap-1">
-                    <span className="material-symbols-outlined text-sm">open_in_new</span>
-                    View Source
-                  </a>
+                  {result.url !== "text://pasted" && (
+                    <a href={result.url} target="_blank" rel="noopener noreferrer" className="text-xs text-amber hover:underline flex items-center gap-1">
+                      <span className="material-symbols-outlined text-sm">open_in_new</span>
+                      View Source
+                    </a>
+                  )}
                 </div>
                 <p className="text-xs text-text-secondary font-mono leading-relaxed bg-surface p-4 rounded-lg whitespace-pre-wrap">{result.content_preview}</p>
               </div>
@@ -246,7 +331,9 @@ export default function PlagiarismCheckerPage() {
             <div className="w-16 h-16 rounded-xl bg-cyan-soft flex items-center justify-center mx-auto mb-6">
               <span className="material-symbols-outlined text-cyan text-3xl">content_copy</span>
             </div>
-            <h3 className="text-lg font-display font-semibold mb-2">Paste a URL to get started</h3>
+            <h3 className="text-lg font-display font-semibold mb-2">
+              {mode === "url" ? "Paste a URL to get started" : "Paste text to get started"}
+            </h3>
             <p className="text-sm text-text-secondary max-w-sm mx-auto">
               The plagiarism checker extracts key passages from the content and searches the web for matching text across millions of sources.
             </p>
