@@ -1665,11 +1665,11 @@ Be thorough and balanced. Note where evidence has lower confidence."""
 
         if clear_memory:
             self.memory.clear()
-            # Also clear the evidence retrieval index for fresh start
-            try:
-                self.findings_retriever.clear()
-            except Exception:
-                logger.debug("Failed to clear findings retriever", exc_info=True)
+            if self.findings_retriever:
+                try:
+                    self.findings_retriever.clear()
+                except Exception:
+                    logger.debug("Failed to clear findings retriever", exc_info=True)
 
     def search_past_evidence(
         self,
@@ -1677,39 +1677,24 @@ Be thorough and balanced. Note where evidence has lower confidence."""
         limit: int = 10,
         min_confidence: float = 0.5,
     ) -> list[dict]:
-        """Search past verification sessions for relevant evidence.
-
-        Uses hybrid semantic + lexical search for high-quality retrieval.
-
-        Args:
-            query: Search query
-            limit: Maximum results
-            min_confidence: Minimum confidence threshold
-
-        Returns:
-            List of dicts with evidence info and relevance scores
-        """
+        """Search past verification sessions for relevant evidence."""
+        if not self.findings_retriever:
+            return []
         results = self.findings_retriever.search(
-            query=query,
-            limit=limit,
-            min_confidence=min_confidence,
-            use_reranker=True,  # Use reranker for best quality
+            query=query, limit=limit, min_confidence=min_confidence,
         )
-
         return [
             {
-                "content": r.finding.content,
-                "evidence_type": r.finding.finding_type.value,
-                "confidence": r.finding.confidence,
-                "source_url": r.finding.source_url,
+                "content": getattr(getattr(r, 'evidence', r), 'content', ''),
                 "score": r.score,
-                "reranked": r.reranked,
             }
             for r in results
         ]
 
     def get_retrieval_stats(self) -> dict:
         """Get statistics about the hybrid retrieval system."""
+        if not self.findings_retriever:
+            return {"status": "disabled"}
         return self.findings_retriever.stats()
 
     async def get_knowledge_graph_exports(self, output_dir: str = ".") -> dict:
