@@ -108,6 +108,60 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Mini Tools */}
+        <div className="mb-16">
+          <div className="flex items-center gap-4 mb-8">
+            <h3 className="text-[12px] font-mono font-bold text-text-muted uppercase tracking-[0.3em]">Tools</h3>
+            <div className="h-px flex-1 bg-obs-border opacity-50" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Fact Check — the existing primary tool */}
+            <button
+              onClick={() => setShowNewCheck(true)}
+              className="group p-6 bg-white border border-obs-border rounded-lg hover:border-amber/40 hover:shadow-md transition-all text-left relative overflow-hidden"
+            >
+              <div className="w-10 h-10 rounded-lg bg-amber-soft flex items-center justify-center mb-5">
+                <span className="material-symbols-outlined text-amber text-xl">verified</span>
+              </div>
+              <h4 className="text-sm font-semibold text-text mb-1.5">Fact Check</h4>
+              <p className="text-xs text-text-secondary leading-relaxed mb-4">Multi-agent research system that verifies claims with web evidence and AI reasoning.</p>
+              <span className="text-[10px] font-mono font-bold text-amber uppercase tracking-widest group-hover:tracking-[0.3em] transition-all">
+                New Audit &rarr;
+              </span>
+            </button>
+
+            {/* AI Content Detector */}
+            <Link
+              href="/tools/ai-detector"
+              className="group p-6 bg-white border border-obs-border rounded-lg hover:border-violet/40 hover:shadow-md transition-all text-left relative overflow-hidden"
+            >
+              <div className="w-10 h-10 rounded-lg bg-violet-soft flex items-center justify-center mb-5">
+                <span className="material-symbols-outlined text-violet text-xl">smart_toy</span>
+              </div>
+              <h4 className="text-sm font-semibold text-text mb-1.5">AI Detector</h4>
+              <p className="text-xs text-text-secondary leading-relaxed mb-4">Detect AI-generated text and images from any URL. Analyzes writing patterns and stylistic markers.</p>
+              <span className="text-[10px] font-mono font-bold text-violet uppercase tracking-widest group-hover:tracking-[0.3em] transition-all">
+                Analyze &rarr;
+              </span>
+            </Link>
+
+            {/* Plagiarism Checker */}
+            <Link
+              href="/tools/plagiarism"
+              className="group p-6 bg-white border border-obs-border rounded-lg hover:border-cyan/40 hover:shadow-md transition-all text-left relative overflow-hidden"
+            >
+              <div className="w-10 h-10 rounded-lg bg-cyan-soft flex items-center justify-center mb-5">
+                <span className="material-symbols-outlined text-cyan text-xl">content_copy</span>
+              </div>
+              <h4 className="text-sm font-semibold text-text mb-1.5">Plagiarism Checker</h4>
+              <p className="text-xs text-text-secondary leading-relaxed mb-4">Check any URL for plagiarized content. Extracts key passages and cross-references web sources.</p>
+              <span className="text-[10px] font-mono font-bold text-cyan uppercase tracking-widest group-hover:tracking-[0.3em] transition-all">
+                Check &rarr;
+              </span>
+            </Link>
+          </div>
+        </div>
+
         {/* Audit Sessions */}
         <div className="space-y-16">
           {/* Active Audits Section */}

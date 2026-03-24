@@ -33,6 +33,7 @@ from api.models import HealthResponse
 from api.routes import agents as agents_routes
 from api.routes import events, evidence, report, checks, sessions
 from api.routes import knowledge as knowledge_routes
+from api.routes import tools as tools_routes
 from api.routes import verification as verification_routes
 
 # Server state
@@ -163,6 +164,7 @@ app.include_router(report.router)
 app.include_router(knowledge_routes.router)
 app.include_router(verification_routes.router)
 app.include_router(agents_routes.router)
+app.include_router(tools_routes.router)
 
 
 @app.get("/", response_model=HealthResponse)
