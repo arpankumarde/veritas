@@ -295,12 +295,12 @@ export default function ActivityFeed({ sessionId, sharedWs }: ActivityFeedProps)
                 : "bg-text-muted"
               }`}
             />
-            <span className="text-sm text-text-secondary">
+            {/* <span className="text-sm text-text-secondary">
               {connStatus === "connected" ? "Connected"
                : connStatus === "reconnecting" ? "Reconnecting"
                : connStatus === "connecting" ? "Connecting"
                : "Disconnected"}
-            </span>
+            </span> */}
           </div>
         </div>
 

@@ -114,7 +114,7 @@ export default function DashboardPage() {
             <h3 className="text-[12px] font-mono font-bold text-text-muted uppercase tracking-[0.3em]">Tools</h3>
             <div className="h-px flex-1 bg-obs-border opacity-50" />
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {/* Fact Check — the existing primary tool */}
             <button
               onClick={() => setShowNewCheck(true)}
@@ -157,6 +157,21 @@ export default function DashboardPage() {
               <p className="text-xs text-text-secondary leading-relaxed mb-4">Check any URL for plagiarized content. Extracts key passages and cross-references web sources.</p>
               <span className="text-[10px] font-mono font-bold text-cyan uppercase tracking-widest group-hover:tracking-[0.3em] transition-all">
                 Check &rarr;
+              </span>
+            </Link>
+
+            {/* AI Image Detector */}
+            <Link
+              href="/tools/image-detector"
+              className="group p-6 bg-white border border-obs-border rounded-lg hover:border-rose/40 hover:shadow-md transition-all text-left relative overflow-hidden"
+            >
+              <div className="w-10 h-10 rounded-lg bg-rose-soft flex items-center justify-center mb-5">
+                <span className="material-symbols-outlined text-rose text-xl">image_search</span>
+              </div>
+              <h4 className="text-sm font-semibold text-text mb-1.5">AI Image Detector</h4>
+              <p className="text-xs text-text-secondary leading-relaxed mb-4">Detect AI-generated images from any URL. Analyzes visual artifacts, anatomy, and lighting cues.</p>
+              <span className="text-[10px] font-mono font-bold text-rose uppercase tracking-widest group-hover:tracking-[0.3em] transition-all">
+                Scan &rarr;
               </span>
             </Link>
           </div>

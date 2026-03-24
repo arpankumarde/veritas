@@ -124,7 +124,7 @@ export default function CheckDetail() {
       // Non-critical
     }
   };
-
+console.log("ab: ", session)
   const [actionPending, setActionPending] = useState(false);
   const [isPausing, setIsPausing] = useState(false);
   const [pauseStale, setPauseStale] = useState(false);
@@ -236,11 +236,11 @@ export default function CheckDetail() {
 
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-4 min-w-0">
-              <Link href="/" className="text-text-secondary hover:text-amber transition-colors mt-1 shrink-0">
+              <Link href="/dashboard" className="text-text-secondary hover:text-amber transition-colors mt-1 shrink-0">
                 <span className="material-symbols-outlined">arrow_back</span>
               </Link>
               <div className="min-w-0">
-                <h1 className="text-xl font-display font-semibold line-clamp-2 leading-tight">{session.goal}</h1>
+                <h1 className="text-xl font-display font-semibold line-clamp-2 leading-tight">{session.claim}</h1>
                 <div className="flex items-center gap-4 mt-2 text-[11px] text-text-muted font-mono">
                   <span>#{session.session_id.slice(0, 8)}</span>
                   <span className="flex items-center gap-1">

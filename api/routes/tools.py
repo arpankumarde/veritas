@@ -1,9 +1,12 @@
 """Mini-tool endpoints — AI detection and plagiarism checking."""
 
 import asyncio
+import os
 import re
+import tempfile
 
-from fastapi import APIRouter, HTTPException
+import httpx
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from claude_agent_sdk import (
@@ -41,6 +44,19 @@ class DetectionResult(BaseModel):
     content_preview: str    # first ~300 chars of scraped content
 
 
+class ImageAnalyzeRequest(BaseModel):
+    url: str
+
+
+class ImageDetectionResult(BaseModel):
+    url: str
+    verdict: str            # "ai_generated" | "human_created" | "inconclusive"
+    confidence: float       # 0-1
+    summary: str
+    indicators: list[str]
+    image_url: str
+
+
 class PlagiarismRequest(BaseModel):
     url: str
 
@@ -73,13 +89,19 @@ def _build_env() -> dict[str, str]:
     return env
 
 
-async def _call_claude(prompt: str, model: str = "sonnet", max_tokens: int = 1024) -> str:
+async def _call_claude(
+    prompt: str,
+    model: str = "sonnet",
+    tools: list[str] | None = None,
+    max_turns: int = 1,
+    timeout: int = 120,
+) -> str:
     """Call Claude via the Agent SDK (same auth as the research engine)."""
     env = _build_env()
     options = ClaudeAgentOptions(
         model=model,
-        max_turns=1,
-        allowed_tools=[],
+        max_turns=max_turns,
+        allowed_tools=tools or [],
         system_prompt="You are an analysis assistant. Follow instructions precisely and output in the exact format requested.",
         env=env,
     )
@@ -94,7 +116,7 @@ async def _call_claude(prompt: str, model: str = "sonnet", max_tokens: int = 102
                     if isinstance(block, TextBlock):
                         response_text += block.text
 
-    await asyncio.wait_for(_run(), timeout=120)
+    await asyncio.wait_for(_run(), timeout=timeout)
     return response_text
 
 
@@ -299,3 +321,263 @@ Consider: Are the matches from the same author? Are they common phrases? Is this
     except Exception as e:
         logger.error("Plagiarism synthesis failed: %s", e)
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+
+# ---------------------------------------------------------------------------
+# AI Image Detection
+# ---------------------------------------------------------------------------
+
+async def _download_image(url: str) -> str:
+    """Download image from URL to a temp file. Returns the file path."""
+    async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
+        resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+        resp.raise_for_status()
+        content_type = resp.headers.get("content-type", "")
+        if not content_type.startswith("image/"):
+            raise ValueError(f"URL is not an image (content-type: {content_type})")
+
+        ext = ".jpg"
+        if "png" in content_type:
+            ext = ".png"
+        elif "webp" in content_type:
+            ext = ".webp"
+        elif "gif" in content_type:
+            ext = ".gif"
+
+        fd, path = tempfile.mkstemp(suffix=ext, prefix="veritas_img_")
+        with os.fdopen(fd, "wb") as f:
+            f.write(resp.content)
+        return path
+
+
+def _extract_image_metadata(filepath: str) -> dict:
+    """Extract rich metadata from an image file for AI detection analysis."""
+    from PIL import Image
+    from PIL.ExifTags import TAGS
+
+    img = Image.open(filepath)
+    file_size = os.path.getsize(filepath)
+
+    meta: dict = {
+        "format": img.format or "unknown",
+        "width": img.width,
+        "height": img.height,
+        "mode": img.mode,
+        "file_size_kb": round(file_size / 1024, 1),
+        "aspect_ratio": round(img.width / max(img.height, 1), 3),
+    }
+
+    # Check if dimensions are common AI sizes
+    ai_sizes = {256, 384, 448, 512, 576, 640, 704, 768, 832, 896, 960, 1024, 1152, 1280, 1344, 1408, 1472, 1536, 2048, 4096}
+    meta["width_is_ai_typical"] = img.width in ai_sizes
+    meta["height_is_ai_typical"] = img.height in ai_sizes
+    meta["both_dims_ai_typical"] = img.width in ai_sizes and img.height in ai_sizes
+    meta["is_square"] = img.width == img.height
+
+    # EXIF analysis
+    exif = img.getexif()
+    meta["has_exif"] = bool(exif)
+    meta["exif_tag_count"] = len(exif) if exif else 0
+
+    if exif:
+        exif_details = {}
+        for tag_id, value in exif.items():
+            tag_name = TAGS.get(tag_id, str(tag_id))
+            try:
+                if isinstance(value, bytes):
+                    exif_details[tag_name] = f"<binary {len(value)} bytes>"
+                elif isinstance(value, (str, int, float)):
+                    exif_details[tag_name] = str(value)[:200]
+            except Exception:
+                pass
+        meta["exif_tags"] = exif_details
+
+        # Key camera fields
+        meta["has_camera_make"] = "Make" in exif_details
+        meta["has_camera_model"] = "Model" in exif_details
+        meta["has_datetime"] = "DateTime" in exif_details or "DateTimeOriginal" in exif_details
+        meta["has_gps"] = any("GPS" in k for k in exif_details)
+        meta["software"] = exif_details.get("Software", "none")
+    else:
+        meta["has_camera_make"] = False
+        meta["has_camera_model"] = False
+        meta["has_datetime"] = False
+        meta["has_gps"] = False
+        meta["software"] = "none"
+
+    # Color analysis
+    try:
+        small = img.convert("RGB").resize((64, 64))
+        pixels = list(small.getdata())
+        r_vals = [p[0] for p in pixels]
+        g_vals = [p[1] for p in pixels]
+        b_vals = [p[2] for p in pixels]
+
+        def _stats(vals: list[int]) -> dict:
+            n = len(vals)
+            mean = sum(vals) / n
+            variance = sum((v - mean) ** 2 for v in vals) / n
+            return {"mean": round(mean, 1), "std": round(variance ** 0.5, 1), "min": min(vals), "max": max(vals)}
+
+        meta["color_r"] = _stats(r_vals)
+        meta["color_g"] = _stats(g_vals)
+        meta["color_b"] = _stats(b_vals)
+
+        # Unique color count (in 64x64 thumbnail)
+        meta["unique_colors_64x64"] = len(set(pixels))
+
+        # Check for unnaturally smooth gradients (low unique colors = synthetic)
+        meta["color_diversity_ratio"] = round(len(set(pixels)) / len(pixels), 3)
+    except Exception:
+        pass
+
+    # PNG-specific: check for tEXt chunks (AI tools embed metadata here)
+    if img.format == "PNG" and hasattr(img, "info"):
+        png_text = {}
+        for k, v in img.info.items():
+            if isinstance(v, str) and len(v) < 500:
+                png_text[k] = v
+            elif isinstance(v, str):
+                png_text[k] = v[:200] + "..."
+        if png_text:
+            meta["png_text_chunks"] = png_text
+
+    img.close()
+    return meta
+
+
+async def _analyze_image_file(filepath: str, source_url: str) -> ImageDetectionResult:
+    """Analyze image metadata with Claude to determine if AI-generated."""
+    try:
+        metadata = _extract_image_metadata(filepath)
+    except Exception as e:
+        logger.error("Image metadata extraction failed: %s", e)
+        raise HTTPException(status_code=422, detail=f"Could not read image: {str(e)}")
+
+    import json
+    meta_str = json.dumps(metadata, indent=2, default=str)
+
+    prompt = f"""You are an expert AI-generated image forensic analyst. Analyze this image's metadata and properties to determine if it was generated by AI (DALL-E, Midjourney, Stable Diffusion, Flux, etc.) or is a real photograph / human-created artwork.
+
+SOURCE: {source_url}
+
+IMAGE METADATA:
+{meta_str}
+
+Key forensic signals to evaluate:
+
+1. **EXIF Data**: Real camera photos almost always have EXIF with Make, Model, DateTime, lens info. AI images typically have NO EXIF or minimal EXIF. This is the strongest single signal.
+
+2. **Dimensions**: AI generators commonly output power-of-2 or standard sizes (512x512, 768x1024, 1024x1024, 1344x768, etc.). Real photos have irregular camera-sensor sizes (4032x3024, 6000x4000, etc.).
+
+3. **Software Field**: Check for AI tool names in software/generator fields (e.g., "DALL-E", "Midjourney", "Stable Diffusion", "ComfyUI", "NovelAI", "Adobe Firefly").
+
+4. **PNG Text Chunks**: AI tools (especially Stable Diffusion/ComfyUI) embed generation parameters in PNG text chunks (look for "parameters", "prompt", "workflow", "sampler", "cfg_scale", "steps", "seed").
+
+5. **Color Properties**: AI images often have smoother color distributions, lower color diversity, and specific noise patterns.
+
+6. **Aspect Ratio**: Exact square (1:1) or common AI ratios (4:3, 3:2 at exact power-of-2 dims) are more suspicious.
+
+7. **File Size**: AI images often have specific compression patterns.
+
+Weigh these signals together. EXIF absence + AI-typical dimensions is very strong evidence. Full camera EXIF with sensor data is very strong counter-evidence.
+
+Provide your analysis in EXACTLY this format (no markdown fences):
+VERDICT: <ai_generated|human_created|inconclusive>
+CONFIDENCE: <0.0 to 1.0>
+SUMMARY: <2-3 sentence explanation>
+INDICATORS:
+- <specific finding 1>
+- <specific finding 2>
+- <specific finding 3>
+- <specific finding 4>
+- <specific finding 5>"""
+
+    text = await _call_claude(prompt, model="sonnet")
+
+    verdict = "inconclusive"
+    confidence = 0.5
+    summary = ""
+    indicators: list[str] = []
+
+    for line in text.split("\n"):
+        line = line.strip()
+        if line.startswith("VERDICT:"):
+            v = line.split(":", 1)[1].strip().lower()
+            if v in ("ai_generated", "human_created", "inconclusive"):
+                verdict = v
+        elif line.startswith("CONFIDENCE:"):
+            try:
+                confidence = float(line.split(":", 1)[1].strip())
+                confidence = max(0.0, min(1.0, confidence))
+            except ValueError:
+                pass
+        elif line.startswith("SUMMARY:"):
+            summary = line.split(":", 1)[1].strip()
+        elif line.startswith("- "):
+            indicators.append(line[2:].strip())
+
+    return ImageDetectionResult(
+        url=source_url,
+        verdict=verdict,
+        confidence=confidence,
+        summary=summary or "Analysis completed.",
+        indicators=indicators[:8],
+        image_url=source_url,
+    )
+
+
+@router.post("/detect-ai-image", response_model=ImageDetectionResult)
+async def detect_ai_image(req: ImageAnalyzeRequest):
+    """Detect whether an image at a URL is AI-generated."""
+    try:
+        filepath = await _download_image(req.url)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Could not download image: {str(e)}")
+
+    try:
+        return await _analyze_image_file(filepath, req.url)
+    except Exception as e:
+        logger.error("AI image detection failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Image analysis failed: {str(e)}")
+    finally:
+        try:
+            os.unlink(filepath)
+        except OSError:
+            pass
+
+
+@router.post("/detect-ai-image-upload", response_model=ImageDetectionResult)
+async def detect_ai_image_upload(file: UploadFile = File(...)):
+    """Detect whether an uploaded image is AI-generated."""
+    content_type = file.content_type or ""
+    if not content_type.startswith("image/"):
+        raise HTTPException(status_code=422, detail=f"File is not an image (type: {content_type})")
+
+    ext = ".jpg"
+    if "png" in content_type:
+        ext = ".png"
+    elif "webp" in content_type:
+        ext = ".webp"
+    elif "gif" in content_type:
+        ext = ".gif"
+
+    fd, filepath = tempfile.mkstemp(suffix=ext, prefix="veritas_img_")
+    try:
+        data = await file.read()
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+
+        return await _analyze_image_file(filepath, f"upload://{file.filename or 'image'}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("AI image upload detection failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Image analysis failed: {str(e)}")
+    finally:
+        try:
+            os.unlink(filepath)
+        except OSError:
+            pass
