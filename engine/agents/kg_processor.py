@@ -65,6 +65,8 @@ class KGProcessor:
         self, evidence_list: list[Evidence], session_id: str
     ) -> None:
         """Index evidence for semantic + lexical search."""
+        if self.findings_retriever is None:
+            return
         try:
             self.findings_retriever.add_findings(
                 findings=evidence_list,

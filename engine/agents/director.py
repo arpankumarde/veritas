@@ -239,10 +239,11 @@ VERDICT PRESENTATION:
                 self.console.print("\n[yellow]Verification paused. Progress saved.[/yellow]")
                 return report
 
-            # Update session
+            # Update session with verdict
             self.current_session.status = "completed"
             self.current_session.ended_at = datetime.now()
             self.current_session.total_findings = len(report.key_evidence)
+            self.current_session.verdict = report.verdict or "UNVERIFIABLE"
             self.current_session.phase = "done"
             await self.db.update_session(self.current_session)
 

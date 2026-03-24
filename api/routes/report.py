@@ -30,8 +30,10 @@ async def get_report(session_id: str):
     if not str(resolved).startswith(str(base_output)):
         raise HTTPException(status_code=400, detail="Invalid session path")
 
-    report_path = resolved / "verdict.md"
-
+    # Try both filenames (report.md is what the engine writes)
+    report_path = resolved / "report.md"
+    if not report_path.exists():
+        report_path = resolved / "verdict.md"
     if not report_path.exists():
         raise HTTPException(status_code=404, detail="Verdict report not found")
 

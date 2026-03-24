@@ -1447,8 +1447,8 @@ Be thorough and balanced. Note where evidence has lower confidence."""
             metadata={"type": "resume", "session_id": session.id},
         )
 
-        # Index existing evidence for retrieval
-        if self.all_evidence:
+        # Index existing evidence for retrieval (if retriever is enabled)
+        if self.all_evidence and self.findings_retriever:
             try:
                 self.findings_retriever.add_findings(
                     findings=self.all_evidence,

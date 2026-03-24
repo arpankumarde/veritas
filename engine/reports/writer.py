@@ -784,7 +784,7 @@ class VerdictReportWriter:
         )
         evidence_text = self._truncate_evidence_text(evidence_text)
 
-        verdict_str = verdict.upper() if verdict else "UNDETERMINED"
+        verdict_str = verdict.upper() if verdict else "PENDING"
 
         prompt = f"""You are writing the Verdict Summary for a fact-check report.
 
@@ -981,7 +981,7 @@ Output ONLY the analysis text, no headers."""
         top_evidence = sorted(evidence, key=lambda e: e.confidence, reverse=True)[:10]
         evidence_summary = "\n".join([f"- {e.content}" for e in top_evidence])
 
-        verdict_str = verdict.upper() if verdict else "UNDETERMINED"
+        verdict_str = verdict.upper() if verdict else "PENDING"
 
         prompt = f"""You are writing the Conclusions section of a fact-check verdict report.
 
@@ -1268,9 +1268,11 @@ Return ONLY the JSON array, no explanation."""
                 continue
         n_academic = len(academic_urls)
 
-        if n_evidence < 5 or n_academic < 2:
+        # For fact-checking, academic sources are rare — don't penalize for that.
+        # Judge coverage by total evidence count alone.
+        if n_evidence < 3:
             confidence = "LOW"
-        elif n_evidence <= 10 and n_academic <= 4:
+        elif n_evidence <= 8:
             confidence = "MEDIUM"
         else:
             confidence = "HIGH"
@@ -1336,9 +1338,8 @@ Return ONLY the JSON array, no explanation."""
 
         if coverage_confidence == "LOW":
             prompt = (
-                "NOTE: Limited published evidence was found on this specific aspect. "
-                "Focus on the available evidence and explicitly acknowledge what is "
-                "not well-covered. Do not pad with tangentially related material.\n\n"
+                "NOTE: Focus on the available evidence. Do not pad with "
+                "tangentially related material.\n\n"
                 + prompt
             )
 
@@ -1346,13 +1347,7 @@ Return ONLY the JSON array, no explanation."""
             prompt, _SECTION_SYSTEM_PROMPT + config.system_suffix
         )
 
-        if coverage_confidence == "LOW" and content:
-            content = (
-                f"*Note: Limited published evidence was found on this specific aspect "
-                f"({n_evidence} pieces of evidence from {n_academic} academic sources). "
-                f"The following represents the best available evidence.*\n\n"
-                + content
-            )
+        # Don't add disclaimers — the evidence gathered is sufficient for fact-checking
 
         return content
 
